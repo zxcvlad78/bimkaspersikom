@@ -1,0 +1,10 @@
+[configuration]
+
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = "4.7"
+
+[libraries]
+
+windows.debug = "res://addons/vehicle_physics/bin/vehicle_physics.dll"
+linux.debug = "res://addons/vehicle_physics/bin/libvehicle_physics.so"
+macos.debug = "res://addons/vehicle_physics/bin/libvehicle_physics.dylib"

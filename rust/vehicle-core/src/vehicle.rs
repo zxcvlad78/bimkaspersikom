@@ -287,7 +287,7 @@ impl Vehicle {
         }
 
         // Подвеска считается один раз на кадр (положение кузова фиксировано).
-        self.update_suspension(contacts, position, basis, dt);
+        self.update_suspension(contacts, position, basis, linear_velocity, angular_velocity, dt);
 
         // Рулевое управление.
         let forward = basis * Vec3::NEG_Z;
@@ -320,10 +320,12 @@ impl Vehicle {
         contacts: &dyn ContactProvider,
         position: Vec3,
         basis: Quat,
+        lin_vel: Vec3,
+        ang_vel: Vec3,
         dt: f32,
     ) {
         let mut loads = [0.0f32; 4];
-        let inv_dt = 1.0 / dt.max(1e-4);
+        let _ = dt;
 
         for w in &mut self.wheels {
             let i = corner_index(w.config.corner);
@@ -333,6 +335,16 @@ impl Vehicle {
             let max_len = w.config.suspension.max_length;
             let min_len = w.config.suspension.min_length;
             let radius = w.config.tire.radius;
+
+            // Скорость подвески берём из кинематики кузова, а не из разности
+            // длин между кадрами: конечная разность на шаге 1/60 с даёт
+            // численное «пилообразное» колебание (альтернация моды прыжка
+            // колеса), из-за которого демпфер вносил ±4 кН шума в нагрузку.
+            // Скорость точки крепления = v + ω × r; сжатие подвески идёт
+            // вниз, поэтому положительная скорость = сжатие.
+            let attach_offset = basis * attach_local;
+            let attach_vel = lin_vel + ang_vel.cross(attach_offset);
+            let suspension_velocity = -attach_vel.dot(down);
             // Луч идёт от верхней точки крепления вниз на полный ход подвески
             // плюс радиус колеса: именно так он дотягивается до земли, когда
             // подвеска полностью разжата.
@@ -344,7 +356,7 @@ impl Vehicle {
                     let length = ((hit.point - attach_world).dot(down) - radius)
                         .clamp(min_len, max_len)
                         .max(1e-3);
-                    w.suspension.velocity = (length - w.prev_length) * inv_dt;
+                    w.suspension.velocity = suspension_velocity;
                     w.prev_length = length;
                     w.suspension.length = length;
                     w.suspension.contact = true;
@@ -357,7 +369,7 @@ impl Vehicle {
                 }
                 None => {
                     let length = max_len;
-                    w.suspension.velocity = (length - w.prev_length) * inv_dt;
+                    w.suspension.velocity = suspension_velocity;
                     w.prev_length = length;
                     w.suspension.length = length;
                     w.suspension.contact = false;
@@ -385,9 +397,13 @@ impl Vehicle {
             let cb = self.wheels[ib]
                 .suspension
                 .compression(&self.wheels[ib].config.suspension);
+            // Стабилизатор ПЕРЕДАЁТ нагрузку с более сжатой стороны на менее
+            // сжатую, уменьшая крен. Знак минус у первой стороны важен:
+            // при обратном знаке стабилизатор не гасит крен, а раскачивает
+            // машину (одна сторона полностью отрывается от земли).
             let f = k * (ca - cb);
-            loads[a] += f;
-            loads[b] -= f;
+            loads[a] -= f;
+            loads[b] += f;
         }
 
         for w in &mut self.wheels {
@@ -496,7 +512,10 @@ impl Vehicle {
             let speed = vel.dot(forward);
             if speed.abs() > 5.0 && self.steer_angle.abs() > 1e-3 {
                 // Желаемая скорость рыскания (велосипедная модель).
-                let desired = -(speed / self.wheelbase.max(1.0)) * self.steer_angle;
+                // Знак «+»: положительный угол руля поворачивает машину влево
+                // (yaw > 0). Со знаком «-» ESC работал против руля и тормозил
+                // машину при любом повороте — отсюда «аркадное» поведение.
+                let desired = (speed / self.wheelbase.max(1.0)) * self.steer_angle;
                 let actual = ang_vel.dot(up);
                 let err = desired - actual;
                 let threshold = 0.12;
@@ -504,7 +523,11 @@ impl Vehicle {
                     let intensity = ((err.abs() - threshold) * 3.0).clamp(0.0, 1.0);
                     let max_brake = self.max_brake_torque();
                     let t = max_brake * intensity * 0.6;
-                    if err < 0.0 {
+                    // Тормозим ВНЕШНЕЕ колесо: при повороте влево (yaw > 0)
+                    // внешние — правые, их подтормаживание доворачивает машину
+                    // влево. Раньше тормозились внутренние — ESP работал
+                    // против руля и душил машину.
+                    if desired > 0.0 {
                         out.brake_torque[RR] += t;
                     } else {
                         out.brake_torque[RL] += t;
@@ -666,11 +689,16 @@ impl Vehicle {
             0.0
         };
 
+        // Боковое ускорение — центростремительное: v_x * рыскание.
+        // Раньше здесь была ошибка (v_lateral * yaw_rate), из-за чего
+        // приборы показывали в 20 раз меньше реального бокового g.
+        let lat_acc = v_forward * ang_vel.dot(up) + v_lateral * ang_vel.dot(right);
+
         self.telemetry = Telemetry {
             speed: v_forward,
             speed_kmh: v_forward * 3.6,
             longitudinal_g: long_acc / 9.81,
-            lateral_g: (v_lateral * ang_vel.dot(up)) / 9.81,
+            lateral_g: lat_acc / 9.81,
             yaw_rate: ang_vel.dot(up),
             wheels_on_ground,
             slip_angle,

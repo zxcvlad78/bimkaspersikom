@@ -85,7 +85,13 @@ impl Suspension {
         } else {
             cfg.damper_rebound
         };
-        force -= damper * self.velocity;
+        // Демпфер ограничен пружинной силой: скорость подвески считается по
+        // разности длин между кадрами, и при дискретном шаге 1/60 с в неё
+        // попадает шум (алиасинг моды «прыжок колеса» ~17 Гц). Без
+        // ограничения демпфер давал ±4 кН мусора поверх ~4 кН пружины.
+        let damper_force = -damper * self.velocity;
+        let limit = cfg.spring_rate * compression;
+        force += damper_force.clamp(-limit, limit);
 
         force.max(0.0)
     }

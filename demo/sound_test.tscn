@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://74rl3t7blb73"]
+
+[ext_resource type="Script" path="res://demo/sound_test.gd" id="1_sound"]
+
+[node name="SoundTest" type="Node3D"]
+script = ExtResource("1_sound")

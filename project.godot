@@ -23,6 +23,14 @@ window/stretch/aspect="expand"
 
 project/assembly_name="bimkaspersikom"
 
+[editor_plugins]
+
+enabled=PackedStringArray("vehicle_physics")
+
+[gdextension]
+
+vehicle_physics="res://addons/vehicle_physics/vehicle_physics.gdextension"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
@@ -30,3 +38,7 @@ project/assembly_name="bimkaspersikom"
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[run]
+
+main_scene="res://demo/vehicle_demo.tscn"
