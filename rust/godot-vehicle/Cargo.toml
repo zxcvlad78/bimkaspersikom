@@ -1,0 +1,16 @@
+[package]
+name = "godot-vehicle"
+description = "GDExtension-обёртка для vehicle-core: узлы и ресурсы Godot."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "vehicle_physics"
+crate-type = ["cdylib"]
+
+[dependencies]
+vehicle-core = { path = "../vehicle-core" }
+glam.workspace = true
+godot = { version = "0.5.5", features = ["api-4-7"] }

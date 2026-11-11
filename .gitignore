@@ -1,3 +1,26 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+export_presets.cfg
+
+# Сборки Rust (cargo)
+/rust/target/
+target/
+
+# Скомпилированная библиотека GDExtension (собирается из исходников)
+addons/vehicle_physics/bin/
+
+# Windows / системное
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Редакторы / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Логи и временные файлы
+*.log
